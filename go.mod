@@ -9,3 +9,5 @@ require (
 	github.com/turbot/go-kit v0.1.1
 	github.com/turbot/steampipe-plugin-sdk v0.2.9
 )
+
+replace github.com/turbot/steampipe-plugin-sdk => github.com/turbot/steampipe-plugin-sdk v0.3.0-rc.0.0.20210608170910-83f1bac3df08

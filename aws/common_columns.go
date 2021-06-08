@@ -110,16 +110,22 @@ func getCommonColumns(ctx context.Context, d *plugin.QueryData, h *plugin.Hydrat
 
 	cacheKey := "commonColumnData" + region
 	var commonColumnData *awsCommonColumnData
-	if cachedData, ok := d.ConnectionManager.Cache.Get(cacheKey); ok {
+
+	// try to get the data from the cache - call GetP to wait for any pending fetches of the same data
+	if cachedData, ok := d.ConnectionManager.Cache.GetP(cacheKey); ok {
 		commonColumnData = cachedData.(*awsCommonColumnData)
 	} else {
 		stsSvc, err := StsService(ctx, d)
 		if err != nil {
+			// let the cache know that we have failed to fetch this item
+			d.ConnectionManager.Cache.ClearPendingItem(cacheKey)
 			return nil, err
 		}
 
 		callerIdentity, err := stsSvc.GetCallerIdentity(&sts.GetCallerIdentityInput{})
 		if err != nil {
+			// let the cache know that we have failed to fetch this item
+			d.ConnectionManager.Cache.ClearPendingItem(cacheKey)
 			return nil, err
 		}
 		commonColumnData = &awsCommonColumnData{
@@ -129,8 +135,9 @@ func getCommonColumns(ctx context.Context, d *plugin.QueryData, h *plugin.Hydrat
 			Region:    region,
 		}
 
-		// save to extension cache
-		d.ConnectionManager.Cache.Set(cacheKey, commonColumnData)
+		// save to the cache
+		// SetP also clears any pending fetches
+		d.ConnectionManager.Cache.SetP(cacheKey, commonColumnData)
 	}
 
 	plugin.Logger(ctx).Trace("getCommonColumns: ", "commonColumnData", commonColumnData)
