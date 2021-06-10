@@ -1243,20 +1243,13 @@ func SsmService(ctx context.Context, d *plugin.QueryData, region string) (*ssm.S
 }
 
 // StsService returns the service connection for AWS STS service
-func StsService(ctx context.Context, d *plugin.QueryData) (*sts.STS, error) {
-	// have we already created and cached the service?
-	serviceCacheKey := "sts"
-	if cachedData, ok := d.ConnectionManager.Cache.Get(serviceCacheKey); ok {
-		return cachedData.(*sts.STS), nil
-	}
-	// so it was not in cache - create service
+func StsService(ctx context.Context, d *plugin.QueryData, _ *plugin.HydrateData) (interface{}, error) {
+	// create service
 	sess, err := getSession(ctx, d, GetDefaultAwsRegion(d))
 	if err != nil {
 		return nil, err
 	}
 	svc := sts.New(sess)
-	d.ConnectionManager.Cache.Set(serviceCacheKey, svc)
-
 	return svc, nil
 }
 

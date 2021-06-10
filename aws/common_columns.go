@@ -10,25 +10,28 @@ import (
 	"github.com/turbot/steampipe-plugin-sdk/plugin/transform"
 )
 
+// define cacheable hydrate function to return common column data
+var commonColumnsHydrate = plugin.CacheableHydrate(getCommonColumns, getCommonColumnsCacheKey)
+
 // column definitions for the common columns
 func commonAwsRegionalColumns() []*plugin.Column {
 	return []*plugin.Column{
 		{
 			Name:        "partition",
 			Type:        proto.ColumnType_STRING,
-			Hydrate:     getCommonColumns,
+			Hydrate:     commonColumnsHydrate,
 			Description: "The AWS partition in which the resource is located (aws, aws-cn, or aws-us-gov).",
 		},
 		{
 			Name:        "region",
 			Type:        proto.ColumnType_STRING,
-			Hydrate:     getCommonColumns,
+			Hydrate:     commonColumnsHydrate,
 			Description: "The AWS Region in which the resource is located.",
 		},
 		{
 			Name:        "account_id",
 			Type:        proto.ColumnType_STRING,
-			Hydrate:     getCommonColumns,
+			Hydrate:     commonColumnsHydrate,
 			Description: "The AWS Account ID in which the resource is located.",
 			Transform:   transform.FromCamel(),
 		},
@@ -41,13 +44,13 @@ func commonS3Columns() []*plugin.Column {
 		{
 			Name:        "partition",
 			Type:        proto.ColumnType_STRING,
-			Hydrate:     getCommonColumns,
+			Hydrate:     commonColumnsHydrate,
 			Description: "The AWS partition in which the resource is located (aws, aws-cn, or aws-us-gov).",
 		},
 		{
 			Name:        "account_id",
 			Type:        proto.ColumnType_STRING,
-			Hydrate:     getCommonColumns,
+			Hydrate:     commonColumnsHydrate,
 			Transform:   transform.FromCamel(),
 			Description: "The AWS Account ID in which the resource is located.",
 		},
@@ -55,11 +58,12 @@ func commonS3Columns() []*plugin.Column {
 }
 
 func commonAwsColumns() []*plugin.Column {
+
 	return []*plugin.Column{
 		{
 			Name:        "partition",
 			Type:        proto.ColumnType_STRING,
-			Hydrate:     getCommonColumns,
+			Hydrate:     commonColumnsHydrate,
 			Description: "The AWS partition in which the resource is located (aws, aws-cn, or aws-us-gov).",
 		},
 		{
@@ -71,7 +75,7 @@ func commonAwsColumns() []*plugin.Column {
 		{
 			Name:        "account_id",
 			Type:        proto.ColumnType_STRING,
-			Hydrate:     getCommonColumns,
+			Hydrate:     commonColumnsHydrate,
 			Description: "The AWS Account ID in which the resource is located.",
 			Transform:   transform.FromCamel(),
 		},
@@ -99,6 +103,40 @@ type awsCommonColumnData struct {
 
 // get columns which are returned with all tables: region, partition and account
 func getCommonColumns(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
+	region := regionFromContext(ctx)
+	plugin.Logger(ctx).Trace("getCommonColumns", "region", region)
+
+	// retrieve sts service using cacheable hydrate function
+	// note: this returns an interface so we will have to cast to a service when we use it
+	stsSvc, err := plugin.ExecuteCacheableHydrate(ctx, d, h, StsService, plugin.ConstantCacheKey("sts"))
+	if err != nil {
+		return nil, err
+	}
+
+	callerIdentity, err := stsSvc.(*sts.STS).GetCallerIdentity(&sts.GetCallerIdentityInput{})
+	if err != nil {
+		return nil, err
+	}
+	commonColumnData := &awsCommonColumnData{
+		// extract partition from arn
+		Partition: strings.Split(*callerIdentity.Arn, ":")[1],
+		AccountId: *callerIdentity.Account,
+		Region:    region,
+	}
+
+	plugin.Logger(ctx).Trace("getCommonColumns: ", "commonColumnData", commonColumnData)
+
+	return commonColumnData, nil
+}
+
+func getCommonColumnsCacheKey(ctx context.Context, _ *plugin.QueryData, _ *plugin.HydrateData) (interface{}, error) {
+	region := regionFromContext(ctx)
+
+	cacheKey := "commonColumnData" + region
+	return cacheKey, nil
+}
+
+func regionFromContext(ctx context.Context) string {
 	var region string
 	if plugin.GetMatrixItem(ctx)[matrixKeyRegion] != nil {
 		region = plugin.GetMatrixItem(ctx)[matrixKeyRegion].(string)
@@ -106,34 +144,5 @@ func getCommonColumns(ctx context.Context, d *plugin.QueryData, h *plugin.Hydrat
 	if region == "" {
 		region = "global"
 	}
-	plugin.Logger(ctx).Trace("getCommonColumns", "region", region)
-
-	cacheKey := "commonColumnData" + region
-	var commonColumnData *awsCommonColumnData
-	if cachedData, ok := d.ConnectionManager.Cache.Get(cacheKey); ok {
-		commonColumnData = cachedData.(*awsCommonColumnData)
-	} else {
-		stsSvc, err := StsService(ctx, d)
-		if err != nil {
-			return nil, err
-		}
-
-		callerIdentity, err := stsSvc.GetCallerIdentity(&sts.GetCallerIdentityInput{})
-		if err != nil {
-			return nil, err
-		}
-		commonColumnData = &awsCommonColumnData{
-			// extract partition from arn
-			Partition: strings.Split(*callerIdentity.Arn, ":")[1],
-			AccountId: *callerIdentity.Account,
-			Region:    region,
-		}
-
-		// save to extension cache
-		d.ConnectionManager.Cache.Set(cacheKey, commonColumnData)
-	}
-
-	plugin.Logger(ctx).Trace("getCommonColumns: ", "commonColumnData", commonColumnData)
-
-	return commonColumnData, nil
+	return region
 }
