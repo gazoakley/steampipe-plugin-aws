@@ -10,28 +10,25 @@ import (
 	"github.com/turbot/steampipe-plugin-sdk/plugin/transform"
 )
 
-// define cacheable hydrate function to return common column data
-var commonColumnsHydrate = plugin.CacheableHydrate(getCommonColumns, getCommonColumnsCacheKey)
-
 // column definitions for the common columns
 func commonAwsRegionalColumns() []*plugin.Column {
 	return []*plugin.Column{
 		{
 			Name:        "partition",
 			Type:        proto.ColumnType_STRING,
-			Hydrate:     commonColumnsHydrate,
+			Hydrate:     getCommonColumnsCached,
 			Description: "The AWS partition in which the resource is located (aws, aws-cn, or aws-us-gov).",
 		},
 		{
 			Name:        "region",
 			Type:        proto.ColumnType_STRING,
-			Hydrate:     commonColumnsHydrate,
+			Hydrate:     getCommonColumnsCached,
 			Description: "The AWS Region in which the resource is located.",
 		},
 		{
 			Name:        "account_id",
 			Type:        proto.ColumnType_STRING,
-			Hydrate:     commonColumnsHydrate,
+			Hydrate:     getCommonColumnsCached,
 			Description: "The AWS Account ID in which the resource is located.",
 			Transform:   transform.FromCamel(),
 		},
@@ -44,13 +41,13 @@ func commonS3Columns() []*plugin.Column {
 		{
 			Name:        "partition",
 			Type:        proto.ColumnType_STRING,
-			Hydrate:     commonColumnsHydrate,
+			Hydrate:     getCommonColumnsCached,
 			Description: "The AWS partition in which the resource is located (aws, aws-cn, or aws-us-gov).",
 		},
 		{
 			Name:        "account_id",
 			Type:        proto.ColumnType_STRING,
-			Hydrate:     commonColumnsHydrate,
+			Hydrate:     getCommonColumnsCached,
 			Transform:   transform.FromCamel(),
 			Description: "The AWS Account ID in which the resource is located.",
 		},
@@ -63,7 +60,7 @@ func commonAwsColumns() []*plugin.Column {
 		{
 			Name:        "partition",
 			Type:        proto.ColumnType_STRING,
-			Hydrate:     commonColumnsHydrate,
+			Hydrate:     getCommonColumnsCached,
 			Description: "The AWS partition in which the resource is located (aws, aws-cn, or aws-us-gov).",
 		},
 		{
@@ -75,7 +72,7 @@ func commonAwsColumns() []*plugin.Column {
 		{
 			Name:        "account_id",
 			Type:        proto.ColumnType_STRING,
-			Hydrate:     commonColumnsHydrate,
+			Hydrate:     getCommonColumnsCached,
 			Description: "The AWS Account ID in which the resource is located.",
 			Transform:   transform.FromCamel(),
 		},
@@ -102,13 +99,15 @@ type awsCommonColumnData struct {
 }
 
 // get columns which are returned with all tables: region, partition and account
+var getCommonColumnsCached = plugin.HydrateFunc(getCommonColumns).WithCache(getCommonColumnsCacheKey)
+
 func getCommonColumns(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
 	region := regionFromContext(ctx)
 	plugin.Logger(ctx).Trace("getCommonColumns", "region", region)
 
 	// retrieve sts service using cacheable hydrate function
 	// note: this returns an interface so we will have to cast to a service when we use it
-	stsSvc, err := plugin.ExecuteCacheableHydrate(ctx, d, h, StsService, plugin.ConstantCacheKey("sts"))
+	stsSvc, err := StsServiceCached(ctx, d, h)
 	if err != nil {
 		return nil, err
 	}

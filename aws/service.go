@@ -1242,8 +1242,10 @@ func SsmService(ctx context.Context, d *plugin.QueryData, region string) (*ssm.S
 	return svc, nil
 }
 
-// StsService returns the service connection for AWS STS service
-func StsService(ctx context.Context, d *plugin.QueryData, _ *plugin.HydrateData) (interface{}, error) {
+// StsServiceCached returns the service connection for AWS STS service
+var StsServiceCached = plugin.HydrateFunc(stsService).WithCache()
+
+func stsService(ctx context.Context, d *plugin.QueryData, _ *plugin.HydrateData) (interface{}, error) {
 	// create service
 	sess, err := getSession(ctx, d, GetDefaultAwsRegion(d))
 	if err != nil {

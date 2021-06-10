@@ -10,4 +10,4 @@ require (
 	github.com/turbot/steampipe-plugin-sdk v0.2.10
 )
 
-replace github.com/turbot/steampipe-plugin-sdk => github.com/turbot/steampipe-plugin-sdk v0.3.0-rc.0.0.20210610094451-11b78049636c
+replace github.com/turbot/steampipe-plugin-sdk => github.com/turbot/steampipe-plugin-sdk v0.3.0-rc.0.0.20210610154658-01aeb79eb7fe
